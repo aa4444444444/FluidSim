@@ -1,41 +1,75 @@
 #include <iostream>
-#include <glad/glad.h>
+#include <GLEW/glew.h>
 #include <GLFW/glfw3.h>
 #include "Shader.h"
+#include "../../../eigen-3.4.0/Eigen/Dense"
+#include "Constants.h"
+#include "Particles.h"
+#include <vector>
+#include <windows.h>
+
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void processInput(GLFWwindow* window);
 void renderLoop();
 void initGLFW();
 void endGLFW();
+void initSPH();
+void update();
+
+
 
 GLFWwindow* window;
 Shader* shader;
 unsigned int VAO, VBO, EBO;
 
-float vertices[] = {
-	// positions // colors
-	0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 0.0f, // bottom right
-	-0.5f, -0.5f, 0.0f, 0.0f, 1.0f, 0.0f, // bottom left
-	0.0f, 0.5f, 0.0f, 0.0f, 0.0f, 1.0f // top
-};
+// solver data
+ParticleList particles;
 
-float texCoords[] = {
-0.0f, 0.0f, // lower-left corner
-1.0f, 0.0f, // lower-right corner
-0.5f, 1.0f // top-center corner
-};
-
-unsigned int indices[] = { // note that we start from 0!
-0, 1, 2
-};
-
+extern "C"
+{
+	__declspec(dllexport) DWORD NvOptimusEnablement = 0x00000001;
+	__declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
+}
 int main() {
 	initGLFW();
-	renderLoop();
 	endGLFW();
 
 	return 0;
+}
+
+void initSPH(void)
+{
+	for (float y = BOUNDARY; y < VIEW_HEIGHT - BOUNDARY * 2.f; y += H)
+	{
+		for (float x = VIEW_WIDTH / 4; x <= VIEW_WIDTH / 2; x += H)
+		{
+			if (particles.size() < DAM_PARTICLES)
+			{
+				float jitter = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+				particles.addParticle(Particle(x + jitter, y));
+			}
+			else
+			{
+				return;
+			}
+		}
+	}
+}
+
+void update()
+{
+	particles.calculateDensities();
+	particles.calculateForces();
+	particles.Integrate();
+
+	glBindVertexArray(VAO);
+	std::vector<float> particlePositions = particles.getParticlePositions();
+	glBufferData(GL_ARRAY_BUFFER, particlePositions.size() * sizeof(float), particlePositions.data(), GL_DYNAMIC_DRAW);
+	glEnableVertexAttribArray(0);
+
+	glBindVertexArray(0);
+	glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
 }
 
 void initGLFW() {
@@ -45,7 +79,7 @@ void initGLFW() {
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 	//glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 
-	window = glfwCreateWindow(800, 600, "Fluid Simulation", NULL, NULL);
+	window = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Fluid Simulation", NULL, NULL);
 	if (window == NULL)
 	{
 		std::cout << "Failed to create GLFW window" << std::endl;
@@ -54,11 +88,13 @@ void initGLFW() {
 	}
 	glfwMakeContextCurrent(window);
 
-	if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
+	GLenum err = glewInit();
+	if (GLEW_OK != err)
 	{
-		std::cout << "Failed to initialize GLAD" << std::endl;
-		return;
+		/* Problem: glewInit failed, something is seriously wrong. */
+		fprintf(stderr, "Error: %s\n", glewGetErrorString(err));
 	}
+	fprintf(stdout, "Status: Using GLEW %s\n", glewGetString(GLEW_VERSION));
 
 	glViewport(0, 0, 800, 600);
 	glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
@@ -68,30 +104,29 @@ void initGLFW() {
 	shader = new Shader("vertex.vert", "fragment.frag");
 	// ///////////////////////////////////////////////////////////////////
 
+	initSPH();
+
 
 	glGenVertexArrays(1, &VAO);
 	glGenBuffers(1, &VBO);
-	glGenBuffers(1, &EBO);
 
 	glBindVertexArray(VAO);
 
 	glBindBuffer(GL_ARRAY_BUFFER, VBO);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+	std::vector<float> particlePositions = particles.getParticlePositions();
+	glBufferData(GL_ARRAY_BUFFER, particlePositions.size() * sizeof(float), particlePositions.data(), GL_DYNAMIC_DRAW);
 
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices,
-		GL_STATIC_DRAW);
-
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float),
+	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float),
 		(void*)0);
 
-	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float),
-		(void*)(3 * sizeof(float)));
-
 	glEnableVertexAttribArray(0);
-	glEnableVertexAttribArray(1);
 
 	glBindVertexArray(0);
+
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	glPointSize(4.0f);
+	
+	renderLoop();
 }
 
 void endGLFW() {
@@ -106,18 +141,19 @@ void renderLoop() {
 	while (!glfwWindowShouldClose(window))
 	{
 		processInput(window);
-
-		glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT);
+		update();
 
-		float timeValue = glfwGetTime();
-		float greenValue = (sin(timeValue) / 2.0f) + 0.5f;
-		int vertexColorLocation = glGetUniformLocation(shader->ID, "ourColor");
+		int vertexWindowWidthLocation = glGetUniformLocation(shader->ID, "windowWidth");
+		int vertexWindowHeightLocation = glGetUniformLocation(shader->ID, "windowHeight");
 
 		shader->use();
-		glUniform4f(vertexColorLocation, 0.0f, greenValue, 0.0f, 1.0f);
+
+		glUniform1i(vertexWindowWidthLocation, WINDOW_WIDTH);
+		glUniform1i(vertexWindowHeightLocation, WINDOW_HEIGHT);
 		glBindVertexArray(VAO);
-		glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+		glDrawArrays(GL_POINTS, 0, particles.size());
+
 		glBindVertexArray(0);
 
 		glfwSwapBuffers(window);
@@ -136,4 +172,8 @@ void processInput(GLFWwindow* window)
 {
 	if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
 		glfwSetWindowShouldClose(window, true);
+	if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS) {
+		particles.clearParticles();
+		InitSPH();
+	}
 }

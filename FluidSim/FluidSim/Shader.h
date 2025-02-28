@@ -5,7 +5,6 @@
 Shader class lovingly borrowed from Joey De Vries' LearnOpenGL textbook
 */
 
-#include <glad/glad.h> // include glad to get the required OpenGL headers
 #include <string>
 #include <fstream>
 #include <sstream>
