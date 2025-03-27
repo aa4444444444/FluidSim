@@ -12,7 +12,7 @@ const static float GAS_CONST = 2000.0f; // const for equation of state
 const static float H = 16.0f;		   // kernel radius
 const static float HSQ = H * H;		   // radius^2 for optimization
 const static float MASS = 2.5f;	   // assume all particles have the same mass
-const static float VISC = 200.f;	   // viscosity constant
+const static float VISC = 200.0f;	   // viscosity constant
 const static float DT = 0.0007f;	   // integration timestep
 
 
@@ -25,7 +25,7 @@ const static float BOUNDARY = H; // boundary epsilon
 const static float BOUND_DAMPING = -0.5f;
 
 // interaction
-const static int DAM_PARTICLES = 50;
+const static int DAM_PARTICLES = 200;
 
 const static int WINDOW_WIDTH = 800;
 const static int WINDOW_HEIGHT = 600;

@@ -3,12 +3,48 @@
 
 #include "../../../eigen-3.4.0/Eigen/Dense"
 #include "Particle.h"
+#include <unordered_map>
 #include <vector>
+#include <omp.h>
 
 // Code is HEAVILY influenced by https://lucasschuermann.com/writing/implementing-sph-in-2d#citation
 
+struct GridCell {
+	std::vector<size_t> particleIndices; // Stores indices of particles in the cell
+};
+
 class ParticleList {
 public:
+	std::unordered_map<int, GridCell> grid; // Spatial hash grid
+
+	int computeGridIndex(const Eigen::Vector2d& pos) {
+		int x = static_cast<int>(pos(0) / H);
+		int y = static_cast<int>(pos(1) / H);
+		return (x * 73856093) + (y * 19349663);; // Unique hash for cell index
+	}
+
+
+	void buildGrid() {
+		grid.clear(); // Reset grid each frame
+		for (size_t i = 0; i < m_particles.size(); ++i) {
+			int cellIndex = computeGridIndex(m_particles[i].getPosition());
+			grid[cellIndex].particleIndices.push_back(i);
+		}
+	}
+
+	std::vector<int> getNeighborCells(const Eigen::Vector2d& pos) {
+		int x = static_cast<int>(pos(0) / H);
+		int y = static_cast<int>(pos(1) / H);
+		std::vector<int> neighbors;
+
+		for (int dx = -1; dx <= 1; ++dx) {
+			for (int dy = -1; dy <= 1; ++dy) {
+				neighbors.push_back(computeGridIndex(Eigen::Vector2d((x + dx) * H, (y + dy) * H)));
+			}
+		}
+		return neighbors;
+	}
+
 	ParticleList(){}
 	std::vector<Particle> getParticles() { return m_particles; }
 	void setParticles(std::vector<Particle> particles) { m_particles = particles; }
@@ -27,50 +63,71 @@ public:
 
 	void calculateDensities()
 	{
-		for (auto& pi : m_particles)
+		#pragma omp parallel for
+		for (size_t i = 0; i < m_particles.size(); ++i)
 		{
+			auto& pi = m_particles[i];
 			pi.setRho(0.0f);
-			for (auto& pj : m_particles)
-			{
-				Eigen::Vector2d rij = pj.getPosition() - pi.getPosition();
-				float r = rij.norm();
-				float r2 = rij.squaredNorm();
 
-				if (r < H)
+			// Get neighboring cells
+			std::vector<int> neighborCells = getNeighborCells(pi.getPosition());
+
+			// Iterate over neighbors
+			for (int cellIndex : neighborCells) {
+				auto it = grid.find(cellIndex);
+				if (it == grid.end()) continue; // Skip empty cells
+				for (size_t j : grid[cellIndex].particleIndices)
 				{
-					// this computation is symmetric
-					pi.setRho(pi.getRho() + MASS * W_POLY6 * pow(HSQ - r2, 3.0f));
+					Eigen::Vector2d rij = m_particles[j].getPosition() - pi.getPosition();
+					float r2 = rij.squaredNorm();
+
+					if (r2 < HSQ) { // Use squared distance for efficiency
+						pi.setRho(pi.getRho() + MASS * W_POLY6 * pow(HSQ - r2, 3.0f));
+					}
 				}
 			}
 			pi.setP(GAS_CONST * (pi.getRho() - REST_DENS)); // Equation 12
 		}
 	}
+	
 
 	void calculateForces()
 	{
-		for (auto& pi : m_particles)
+		#pragma omp parallel for
+		for (size_t i = 0; i < m_particles.size(); ++i)
 		{
+			auto& pi = m_particles[i];
 			Eigen::Vector2d pressure(0.f, 0.f);
 			Eigen::Vector2d viscosity(0.f, 0.f);
-			for (auto& pj : m_particles)
-			{
-				if (&pi == &pj)
-				{
-					continue;
-				}
 
-				Eigen::Vector2d rij = pj.getPosition() - pi.getPosition();
-				float r = rij.norm();
+			// Get neighboring cells
+			std::vector<int> neighborCells = getNeighborCells(pi.getPosition());
 
-				if (r < H)
+			for (int cellIndex : neighborCells) {
+				auto it = grid.find(cellIndex);
+				if (it == grid.end()) continue; // Skip empty cells
+
+				for (size_t j : it->second.particleIndices)
 				{
-					// compute pressure force contribution
-					pressure += -rij.normalized() * MASS * (pi.getP() + pj.getP()) / 
-						(2.0f * pj.getRho()) * W_SPIKY * pow(H - r, 3.f);
-					// compute viscosity force contribution
-					viscosity += VISC * MASS * (pj.getVelocity() - pi.getVelocity()) / pj.getRho() * W_VISCOSITY * (H - r);
+					if (i == j) continue;
+
+					Eigen::Vector2d rij = m_particles[j].getPosition() - pi.getPosition();
+					float r2 = rij.squaredNorm();
+
+					if (r2 < HSQ) { // Only compute sqrt if within influence radius
+						float r = sqrt(r2); // Now only computed when necessary
+
+						// Compute pressure force
+						pressure += -rij.normalized() * MASS * (pi.getP() + m_particles[j].getP()) /
+							(2.0f * m_particles[j].getRho()) * W_SPIKY * pow(H - r, 3.f);
+
+						// Compute viscosity force
+						viscosity += VISC * MASS * (m_particles[j].getVelocity() - pi.getVelocity()) /
+							m_particles[j].getRho() * W_VISCOSITY * (H - r);
+					}
 				}
 			}
+
 			Eigen::Vector2d fgrav = G * MASS / pi.getRho();
 			pi.setForce(pressure + viscosity + fgrav);
 		}
@@ -78,8 +135,10 @@ public:
 
 	void Integrate()
 	{
-		for (auto& p : m_particles)
+		#pragma omp parallel for
+		for (size_t i = 0; i < m_particles.size(); ++i)
 		{
+			auto& p = m_particles[i];
 			// Leapfrog Integration
 			p.setVelocity(p.getVelocity() + DT * p.getForce() / p.getRho());
 			p.setPosition(p.getPosition() + DT * p.getVelocity());

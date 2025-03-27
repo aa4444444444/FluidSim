@@ -40,7 +40,7 @@ int main() {
 
 void initSPH(void)
 {
-	for (float y = BOUNDARY; y < VIEW_HEIGHT - BOUNDARY * 2.f; y += H)
+	for (float y = BOUNDARY + 8 * H; y < VIEW_HEIGHT - BOUNDARY * 2.f; y += H)
 	{
 		for (float x = VIEW_WIDTH / 4; x <= VIEW_WIDTH / 2; x += H)
 		{
@@ -59,6 +59,7 @@ void initSPH(void)
 
 void update()
 {
+	particles.buildGrid();
 	particles.calculateDensities();
 	particles.calculateForces();
 	particles.Integrate();
@@ -174,6 +175,6 @@ void processInput(GLFWwindow* window)
 		glfwSetWindowShouldClose(window, true);
 	if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS) {
 		particles.clearParticles();
-		InitSPH();
+		initSPH();
 	}
 }
