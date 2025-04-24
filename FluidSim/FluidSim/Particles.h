@@ -45,6 +45,53 @@ public:
 		return neighbors;
 	}
 
+	void applyMouseDragForce(double mouseX, double mouseY, const Eigen::Vector2d& force)
+	{
+		// Convert screen coordinates to simulation coordinates
+		// We can ignore any x values less than WINDOW_WIDTH/4 or more than 3 * WINDOW_WIDTH/4 by clamping
+		if (mouseX < WINDOW_WIDTH / 4.0f) {
+			mouseX = WINDOW_WIDTH / 4.0f;
+		}
+
+		if (mouseX > 3.0f * WINDOW_WIDTH / 4.0f) {
+			mouseX = 3.0f * WINDOW_WIDTH / 4.0f;
+		}
+
+		// 'Flip' y so that the bottom is closer to 0 and the top is closer to WINDOW_HEIGHT
+		mouseY = WINDOW_HEIGHT - mouseY;
+
+		if (mouseY > 3.0f * WINDOW_HEIGHT / 4.0f) {
+			mouseY = 3.0f * WINDOW_HEIGHT / 4.0f;
+		}
+
+		if (mouseY < WINDOW_HEIGHT / 4.0f) {
+			mouseY = WINDOW_HEIGHT / 4.0f;
+		}
+
+		mouseX -= WINDOW_WIDTH / 4.0f;
+		mouseY -= WINDOW_HEIGHT / 4.0f;
+	
+		// Particle x values go from BOUNDARY to (VIEW_WIDTH - BOUNDARY)
+		// Mouse x values go from 0 to WINDOW_WIDTH
+		// Have to convert between the two for accurate results
+		// Same goes for y values
+		double worldMouseX = static_cast<float>(BOUNDARY + (mouseX / (WINDOW_WIDTH / 2.0f)) * (VIEW_WIDTH - 2.0f * BOUNDARY));
+		double worldMouseY = static_cast<float>(BOUNDARY + (mouseY / (WINDOW_HEIGHT / 2.0f)) * (VIEW_HEIGHT - 2.0f * BOUNDARY));
+
+		for (auto& p : m_particles)
+		{
+			// Compute distance from mouse to particle
+			Eigen::Vector2d diff = p.getPosition() - Eigen::Vector2d(worldMouseX, worldMouseY);
+			float distance = diff.norm();
+
+			// Apply force if within a certain radius
+			if (distance < 2 * H) // Adjust radius as needed
+			{
+				p.setForce(p.getForce() + force) ; // Damping effect to avoid extreme forces
+			}
+		}
+	}
+
 	ParticleList(){}
 	std::vector<Particle> getParticles() { return m_particles; }
 	void setParticles(std::vector<Particle> particles) { m_particles = particles; }
@@ -52,6 +99,7 @@ public:
 	void addParticle(Particle p) { m_particles.push_back(p); }
 	size_t size() { return m_particles.size(); }
 	Particle* data() { return m_particles.data(); }
+
 	std::vector<float> getParticlePositions(){
 		std::vector<float> positions;
 		for (auto& pi : m_particles) {

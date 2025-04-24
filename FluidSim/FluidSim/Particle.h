@@ -6,6 +6,7 @@
 class Particle
 {
 public:
+	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 	Particle(float x, float y) {
 		m_position = Eigen::Vector2d(x, y);
 		m_velocity = Eigen::Vector2d(0.0f, 0.0f);

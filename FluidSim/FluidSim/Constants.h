@@ -25,11 +25,11 @@ const static float BOUNDARY = H; // boundary epsilon
 const static float BOUND_DAMPING = -0.5f;
 
 // interaction
-const static int DAM_PARTICLES = 200;
+const static int DAM_PARTICLES = 400;
 
 const static int WINDOW_WIDTH = 800;
 const static int WINDOW_HEIGHT = 600;
-const static double VIEW_WIDTH = 1.5 * 800.f;
-const static double VIEW_HEIGHT = 1.5 * 600.f;
+const static double VIEW_WIDTH = 1.0 * 800.f;
+const static double VIEW_HEIGHT = 1.0 * 600.f;
 
 #endif

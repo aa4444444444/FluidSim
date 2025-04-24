@@ -17,7 +17,10 @@ void endGLFW();
 void initSPH();
 void update();
 
-
+// Used to track mouse dragging
+double pressMouseX, pressMouseY, dragX, dragY;
+bool mousePressed = false;
+bool mouseReleased = false;
 
 GLFWwindow* window;
 Shader* shader;
@@ -59,9 +62,18 @@ void initSPH(void)
 
 void update()
 {
+
+	// Continue with simulation steps
 	particles.buildGrid();
 	particles.calculateDensities();
 	particles.calculateForces();
+	if (mouseReleased) {
+		mouseReleased = false;
+		Eigen::Vector2d dragForce(dragX * 1000.0f, -dragY * 1000.0f);
+
+		// Apply force to nearby particles
+		particles.applyMouseDragForce(pressMouseX, pressMouseY, dragForce);
+	}
 	particles.Integrate();
 
 	glBindVertexArray(VAO);
@@ -176,5 +188,22 @@ void processInput(GLFWwindow* window)
 	if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS) {
 		particles.clearParticles();
 		initSPH();
+	}
+
+	// Detect mouse press and release
+	if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS && !mousePressed) {
+		mousePressed = true;
+		glfwGetCursorPos(window, &pressMouseX, &pressMouseY);
+	}
+	if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_RELEASE && mousePressed) {
+		mousePressed = false;
+		mouseReleased = true;
+
+		double releaseX, releaseY;
+		glfwGetCursorPos(window, &releaseX, &releaseY);
+
+		// Compute drag force vector from press to release
+		dragX = releaseX - pressMouseX;
+		dragY = releaseY - pressMouseY;
 	}
 }
