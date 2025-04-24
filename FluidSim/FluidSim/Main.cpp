@@ -29,11 +29,13 @@ unsigned int VAO, VBO, EBO;
 // solver data
 ParticleList particles;
 
+// Ensures GPU usage
 extern "C"
 {
 	__declspec(dllexport) DWORD NvOptimusEnablement = 0x00000001;
 	__declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
 }
+
 int main() {
 	initGLFW();
 	endGLFW();
@@ -41,6 +43,7 @@ int main() {
 	return 0;
 }
 
+// Initializes SPH by spwaning in the particles, code was modified from Lucas-Schuermann
 void initSPH(void)
 {
 	for (float y = BOUNDARY + 8 * H; y < VIEW_HEIGHT - BOUNDARY * 2.f; y += H)
@@ -62,11 +65,12 @@ void initSPH(void)
 
 void update()
 {
-
 	// Continue with simulation steps
 	particles.buildGrid();
 	particles.calculateDensities();
 	particles.calculateForces();
+
+	// Make sure this is done AFTER calculate forces, otherwise it will get overriden
 	if (mouseReleased) {
 		mouseReleased = false;
 		Eigen::Vector2d dragForce(dragX * 1000.0f, -dragY * 1000.0f);
@@ -74,6 +78,7 @@ void update()
 		// Apply force to nearby particles
 		particles.applyMouseDragForce(pressMouseX, pressMouseY, dragForce);
 	}
+
 	particles.Integrate();
 
 	glBindVertexArray(VAO);
@@ -109,7 +114,7 @@ void initGLFW() {
 	}
 	fprintf(stdout, "Status: Using GLEW %s\n", glewGetString(GLEW_VERSION));
 
-	glViewport(0, 0, 800, 600);
+	glViewport(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
 	glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
 
 	// Shader Nonsense

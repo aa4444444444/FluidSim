@@ -1,6 +1,8 @@
 #ifndef CONSTANTS_H
 #define CONSTANTS_H
 
+// This file contains various constants used throughout the code
+
 # define M_PI           3.14159265358979323846
 #include "../../../eigen-3.4.0/Eigen/Dense"
 

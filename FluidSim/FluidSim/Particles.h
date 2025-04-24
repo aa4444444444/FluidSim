@@ -9,10 +9,12 @@
 
 // Code is HEAVILY influenced by https://lucasschuermann.com/writing/implementing-sph-in-2d#citation
 
+// Structures the particles into grids which can help speed up calculations
 struct GridCell {
 	std::vector<size_t> particleIndices; // Stores indices of particles in the cell
 };
 
+// Class representing the list of particles, as well as operations performed on them
 class ParticleList {
 public:
 	std::unordered_map<int, GridCell> grid; // Spatial hash grid
@@ -20,10 +22,10 @@ public:
 	int computeGridIndex(const Eigen::Vector2d& pos) {
 		int x = static_cast<int>(pos(0) / H);
 		int y = static_cast<int>(pos(1) / H);
-		return (x * 73856093) + (y * 19349663);; // Unique hash for cell index
+		return (x * 73856093) + (y * 19349663); // Unique hash for cell index
 	}
 
-
+	// Builds the particle grid
 	void buildGrid() {
 		grid.clear(); // Reset grid each frame
 		for (size_t i = 0; i < m_particles.size(); ++i) {
@@ -32,6 +34,7 @@ public:
 		}
 	}
 
+	// Returns a vector of neighbors for a given position
 	std::vector<int> getNeighborCells(const Eigen::Vector2d& pos) {
 		int x = static_cast<int>(pos(0) / H);
 		int y = static_cast<int>(pos(1) / H);
@@ -45,6 +48,7 @@ public:
 		return neighbors;
 	}
 
+	// Applies mouse drag to particles by adding force to them
 	void applyMouseDragForce(double mouseX, double mouseY, const Eigen::Vector2d& force)
 	{
 		// Convert screen coordinates to simulation coordinates
@@ -85,22 +89,20 @@ public:
 			float distance = diff.norm();
 
 			// Apply force if within a certain radius
-			if (distance < 2 * H) // Adjust radius as needed
+			if (distance < 2 * H) // Adjust radius as needed, using 2 * H here
 			{
-				p.setForce(p.getForce() + force) ; // Damping effect to avoid extreme forces
+				p.setForce(p.getForce() + force);
 			}
 		}
 	}
 
+	// Constructor
 	ParticleList(){}
+
+	// Getters/Setters
 	std::vector<Particle> getParticles() { return m_particles; }
 	void setParticles(std::vector<Particle> particles) { m_particles = particles; }
-	void clearParticles() { m_particles.clear(); }
-	void addParticle(Particle p) { m_particles.push_back(p); }
-	size_t size() { return m_particles.size(); }
-	Particle* data() { return m_particles.data(); }
-
-	std::vector<float> getParticlePositions(){
+	std::vector<float> getParticlePositions() {
 		std::vector<float> positions;
 		for (auto& pi : m_particles) {
 			positions.push_back(pi.getPosition()(0));
@@ -109,6 +111,19 @@ public:
 		return positions;
 	}
 
+	// Clear all particles
+	void clearParticles() { m_particles.clear(); }
+
+	// Add a particle to the list
+	void addParticle(Particle p) { m_particles.push_back(p); }
+
+	// Returns the number of particles
+	size_t size() { return m_particles.size(); }
+
+	// Returns particle data
+	Particle* data() { return m_particles.data(); }
+
+	// Calculates densities using OpenMP for parallelism
 	void calculateDensities()
 	{
 		#pragma omp parallel for
@@ -138,7 +153,7 @@ public:
 		}
 	}
 	
-
+	// Calculates forces using OpenMP for parallelism
 	void calculateForces()
 	{
 		#pragma omp parallel for
@@ -165,11 +180,11 @@ public:
 					if (r2 < HSQ) { // Only compute sqrt if within influence radius
 						float r = sqrt(r2); // Now only computed when necessary
 
-						// Compute pressure force
+						// pressure force
 						pressure += -rij.normalized() * MASS * (pi.getP() + m_particles[j].getP()) /
 							(2.0f * m_particles[j].getRho()) * W_SPIKY * pow(H - r, 3.f);
 
-						// Compute viscosity force
+						// viscosity force
 						viscosity += VISC * MASS * (m_particles[j].getVelocity() - pi.getVelocity()) /
 							m_particles[j].getRho() * W_VISCOSITY * (H - r);
 					}
@@ -181,6 +196,7 @@ public:
 		}
 	}
 
+	// Integrating using Euler's method with OpenMP for parallelism
 	void Integrate()
 	{
 		#pragma omp parallel for
