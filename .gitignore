@@ -33,7 +33,5 @@
 
 # VS stuff
 FluidSim/.vs/*
-FluidSim/FluidSim/FluidSim.vcxproj
-FluidSim/FluidSim/FluidSim.vcxproj.*
 FluidSim/FluidSim/x64/*
 FluidSim/x64/*
